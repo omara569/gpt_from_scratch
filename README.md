@@ -1,0 +1,1 @@
+This is following along Andrej Karpathy's [Let's Build GPT: from scratch, in code, spelled out.](https://www.youtube.com/watch?v=kCc8FmEb1nY)
