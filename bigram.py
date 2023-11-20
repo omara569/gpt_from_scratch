@@ -89,7 +89,10 @@ class BigramLanguageModel(nn.Module):
         tok_emb = self.token_embedding_table(idx) # (B,T,C)
         pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T, C) --> Integers from 0 to T-1
         # This addition of the two tensors will result in the positional embedding getting brodcased across the batches
-        x = tok_emb + pos_emb #(B, T, C) 
+        ## In the context of neural language models, this addition of token embeddings and position embeddings is a common practice to enhance 
+        ## the model's ability to capture sequential information. It helps the model distinguish between tokens at different positions in the sequence, 
+        ## especially when the model needs to understand the order of the tokens in the input data.
+        x = tok_emb + pos_emb #(B, T, C) --> What is being fed in is a combination of the time (i.e. position in token) and the Channel
         logits = self.lm_head(x) # (B, T, vocab_size)
 
         if targets is None:
