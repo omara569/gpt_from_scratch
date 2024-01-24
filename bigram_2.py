@@ -5,7 +5,7 @@ import requests
 
 # hyperparameters
 batch_size = 32 # how many independent sequences will we process in parallel?
-block_size = 8 # what is the maximum context length for predictions?
+block_size = 64 # what is the maximum context length for predictions?
 max_iters = 5000
 eval_interval = 500
 learning_rate = 1e-3
@@ -15,6 +15,9 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 eval_iters = 200
 n_embed = 32 ## Number of embedding dimensions. We want to be flexible here for model performance
+n_head = 8 
+n_layer = 3
+dropout = .2
 # ------------
 
 torch.manual_seed(1337)
@@ -59,7 +62,7 @@ def get_batch(split):
 
 ## New Function - this one will average out the loss over multiple batches. This will result in a much less noisy loss!
 ## @torch.no_grad() disables gradient calculation for the block of code defined below it. This saves computation time
-@torch.no_grad()
+@torch.no_grad
 def estimate_loss():
     out = {}
     model.eval() ## Sets the model in evaluation mode. This is 
@@ -84,6 +87,8 @@ class Head(nn.Module):
         # We need to use a register buffer, because although this below variable is not a model parameter, it is related to the model's state of affairs
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size))) # tril becomes the name of the variable
 
+        self.dropout = nn.Dropout(dropout)
+
     def forward(self, x):
         B, T, C = x.shape
         k = self.key(x) # B, T, C
@@ -93,6 +98,7 @@ class Head(nn.Module):
         wei = q @ k.transpose(-2, -1) * C ** -.5 # C encompasses our block size. BTC @ BTC --> BTT
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # B, T, T
         wei = F.softmax(wei, dim=-1) # B, T, T
+        wei = self.dropout(wei)
         # Perform the weighted aggregation of the values
         v = self.value(x) # B, T, C
         out = wei @ v # (B, T, T) @ (B, T, C) -> (B, T, C)
@@ -104,6 +110,7 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         self.heads = nn.ModuleList( [Head(head_size) for _ in range(num_heads)] ) # Creates an iterable of modules that you can do operations on all at once
         self.proj = nn.Linear(n_embed, n_embed)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim=-1)
@@ -117,7 +124,8 @@ class FeedForward(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(n_embed, 4 * n_embed),
             nn.ReLU(),
-            nn.Linear(4 * n_embed, n_embed)
+            nn.Linear(4 * n_embed, n_embed),
+            nn.Dropout(dropout),
         )
     
     def forward(self, x):
@@ -130,10 +138,12 @@ class Block(nn.Module):
         head_size = n_embed // n_head 
         self.sa = MultiHeadAttention(n_head, head_size)
         self.ffwd = FeedForward(n_embed)
+        self.ln1 = nn.LayerNorm(n_embed)
+        self.ln2 = nn.LayerNorm(n_embed)
 
     def forward(self, x):
-        x += self.sa(x) #Residual connections we're adding in
-        x += self.ffwd(x)
+        x = x + self.sa(self.ln1(x)) #Residual connections we're adding in
+        x = x + self.ffwd(self.ln2(x))
         return x
 
 # super simple bigram model
@@ -151,11 +161,8 @@ class BigramLanguageModel(nn.Module):
         """self.sa_heads = MultiHeadAttention(4, n_embed//4) # i.e. 4 heads of 8-dimensional self-attention
         self.ffwd = FeedForward(n_embed)"""
 
-        self.blocks = nn.Sequential(
-            Block(n_embed, n_head=4),
-            Block(n_embed, n_head=4),
-            Block(n_embed, n_head=4),
-        )
+        self.blocks = nn.Sequential(*[Block(n_embed, n_head=n_head) for _ in range(n_layer)])
+        self.ln_f = nn.LayerNorm(n_embed) # Final layer norm
         self.lm_head = nn.Linear(n_embed, vocab_size) # (B, T, vocab_size) Linear layer that'll map the model outputs to. We need this because our number of embeddings is going to vary
 
 
