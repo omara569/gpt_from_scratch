@@ -8,7 +8,7 @@ def get_text(url: str) -> str:
     '''
         Obtain the text for training purposes
     '''
-    content = requests.get(url)
+    content = requests.get(url, timeout=None)
     return content.text
 
 
@@ -38,6 +38,16 @@ def convert_output_to_strs(input_list: list, mapper: dict) -> List[str]:
     return [mapper[i] for i in input_list]
 
 
+def get_batch(data: torch.tensor, block_size=8, batch_size=4) -> Tuple[torch.tensor, torch.tensor]:
+    '''
+        This will create a batch for processing (either training or testing). 
+    '''
+    nums_to_produce = torch.randint(low=0, high=len(data)-block_size+1, size=(batch_size, 1)) # produce 4 random integers for the positions of each index of the batch
+    X = torch.vstack([data[i:i+block_size] for i in nums_to_produce])
+    y = torch.vstack([data[i+1:i+block_size] for i in nums_to_produce])
+    return X, y
+
+
 if __name__=='__main__':
     book_text = get_text('https://www.gutenberg.org/cache/epub/59306/pg59306.txt')
     vocab, length_vocab = create_vocabulary(book_text)
@@ -51,9 +61,11 @@ if __name__=='__main__':
 
     # split training and test data
     training_end_index = int(.9 * len(input_to_nums)) # we'll use the first 90% of the data as the training set
-    training_set, testing_set = input_to_nums[:training_end_index], input_to_nums[training_end_index:]
-    training_set = torch.tensor(training_set, dtype=torch.long)
-    test_set = torch.tensor(testing_set, dtype=torch.long)
+    training_data, testing_data = input_to_nums[:training_end_index], input_to_nums[training_end_index:]
+    training_set = torch.tensor(training_data, dtype=torch.long)
+    test_set = torch.tensor(testing_data, dtype=torch.long)
 
     # create data loader
+    torch.manual_seed(42)
+    X, y = get_batch(training_set)
     
