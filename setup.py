@@ -67,5 +67,7 @@ if __name__=='__main__':
 
     # create data loader
     torch.manual_seed(42)
-    X, y = get_batch(training_set)
+    block_size, batch_size = 8, 4
+    X, y = get_batch(training_set, block_size, batch_size)
+
     
