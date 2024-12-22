@@ -1,7 +1,7 @@
 # Imports
 import torch
 import torch.nn as nn 
-import torch.functional as F
+import torch.nn.functional as F
 
 num_embeddings = 32
 num_block_layers = 6 # as in the paper
@@ -37,11 +37,11 @@ class Attention(nn.Module):
         '''
         super().__init__()
         self.dim_per_head = dim_per_head
-        self.q = nn.Linear(dim_per_head, dim_per_head)
-        self.k = nn.Linear(dim_per_head, dim_per_head)
-        self.v = nn.Linear(dim_per_head, dim_per_head)
+        self.q = nn.Linear(num_embeddings, dim_per_head)
+        self.k = nn.Linear(num_embeddings, dim_per_head)
+        self.v = nn.Linear(num_embeddings, dim_per_head)
 
-        self.register_buffer('masked_weights', torch.tril(torch.ones(dim_per_head, dim_per_head)))
+        self.register_buffer('masked_weights', torch.tril(torch.ones(num_tokens_per_batch_stream, num_tokens_per_batch_stream)))
 
     
     def forward(self, input_data):
@@ -49,9 +49,9 @@ class Attention(nn.Module):
         key_vals = self.k(input_data)
         value_vals = self.v(input_data)
 
-        mult = (query_vals @ key_vals.T) / ((self.dim_per_head)**5) # attention weighting
-        mult = mult.masked_fill(self.masked_weights[:self.dim_per_head,:self.dim_per_head] == 0, float('-inf'))
-        mult = F.softmax(mult)
+        mult = (query_vals @ key_vals.transpose(1,2)) / ((self.dim_per_head)**.5) # attention weighting
+        mult = mult.masked_fill(self.masked_weights == 0, float('-inf'))
+        mult = F.softmax(mult, 2)
         return mult @ value_vals
 
 
@@ -59,12 +59,12 @@ class MultiAttention(nn.Module):
     def __init__(self):
         super().__init__()
         # Multi-headed attention is taking multiple attention heads and having them function in parallel, concatenating their results at the end. Each attention performs operations on a subset of the embedding dimensionality
-        self.attention_head_list = nn.ModuleList([Attention(num_embeddings//num_heads) for i in range(num_heads)])
+        self.attention_head_list = nn.ModuleList([Attention(num_embeddings//num_heads) for _ in range(num_heads)])
         self.lin_layer = nn.Linear(num_embeddings, num_embeddings)
 
     
     def forward(self, input_data):
-        return self.lin_layer(torch.concat(*[attention_head(input_data) for attention_head in self.attention_head_list]))
+        return self.lin_layer(torch.concat([attention_head(input_data) for attention_head in self.attention_head_list], dim=2))
 
 
 class Block_Layer(nn.Module):
