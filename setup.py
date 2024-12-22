@@ -1,7 +1,7 @@
 import requests 
 from typing import Tuple, List
 import torch
-
+from transformer_building import Transformer_Model
 
 
 def get_text(url: str) -> str:
@@ -70,4 +70,6 @@ if __name__=='__main__':
     block_size, batch_size = 8, 4
     X, y = get_batch(training_set, block_size, batch_size)
 
+    model = Transformer_Model()
+    model(X, y)
     
