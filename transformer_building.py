@@ -91,7 +91,7 @@ class Transformer_Model(nn.Module):
 
 
 
-    def forward(self, input_data, expected_result):
+    def forward(self, input_data, expected_result=None):
         # first we obtain the positional encoding values
         positional_embeddings = self.positional_embedding_table(torch.arange(num_tokens_per_batch_stream))
         token_embeddings = self.token_embedding_table(input_data)
@@ -104,9 +104,37 @@ class Transformer_Model(nn.Module):
         x_2 = self.feed_forward(x)
         x = x+x_2 
         x = self.layer_norm_2(x)
-        x = self.lin_layer(x)
-        return x 
+        x = self.lin_layer(x) # this final layer calculates our most probable word from the list of words (shape is Batch-Time-Token)
+
+        if not expected_result: # i.e. we're generating, not training
+            return x, None 
+
+        # calculate the loss and return it. for this we're better off just turning the whole output result and expected output result into a 1 by N dimensional value and performing cross entropy
+        batch_size = logits.shape[0] # we only need the first one, as it is set in the setup. The other two are already avaialble in our code
+        logits = x.view(batch_size*num_tokens_per_batch_stream, num_tokens) 
+        target_values = expected_result.view(batch_size*num_tokens_per_batch_stream)
+        loss = F.cross_entropy(logits, target_values)
+
+        return logits, loss
+         
     
+    def generate(self, context: torch.tensor, max_new_tokens: int):
+        '''
+            Function to generate tokens. This starts by taking a specific token context and then autoregressing to get the output
+        '''
+        updated_context = context
+        for _ in range(max_new_tokens):
+            new_context = updated_context[:, -num_tokens_per_batch_stream:] # we have a limited context we work with when training and generating
+            logits, _ = self(new_context) # we throw away the loss since it's not used in generation
+            logits_2 = logits[:, -1, :] # takes the last predicted token's logits in each batch of elements
+            probs = F.softmax(logits_2, dim=-1) # run softmax on each batch's logits for the last predicted token
+            # here, we use the multinomial distribution
+            next_token = torch.multinomial(probs, num_samples=1) # generate the next sample with a degree of randomness, as we don't always want the most probable sample for the sake of textual diversity
+            updated_context = torch.cat((updated_context, next_token), dim=1) # updates the time component (list of tokens for the batch) of the given context
+        return updated_context
+
+
+
 
 
 

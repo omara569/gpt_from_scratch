@@ -44,7 +44,7 @@ def get_batch(data: torch.tensor, block_size=8, batch_size=4) -> Tuple[torch.ten
     '''
     nums_to_produce = torch.randint(low=0, high=len(data)-block_size+1, size=(batch_size, 1)) # produce 4 random integers for the positions of each index of the batch
     X = torch.vstack([data[i:i+block_size] for i in nums_to_produce])
-    y = torch.vstack([data[i+1:i+block_size] for i in nums_to_produce])
+    y = torch.vstack([data[i+1:i+block_size+1] for i in nums_to_produce])
     return X, y
 
 
