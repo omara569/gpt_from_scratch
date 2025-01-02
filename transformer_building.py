@@ -8,7 +8,7 @@ num_block_layers = 6 # as in the paper
 num_heads = 8 # number of heads for multi-headed attention
 num_tokens_per_batch_stream = 8 # number of tokens per sequence
 num_epochs = 5000
-num_tokens = 131 # NOTE: Change this to be the actual number of unique tokens
+num_tokens = 118 # NOTE: Change this to be the actual number of unique tokens
 dropout_probability = .2
 masked_attention = True
 
@@ -49,8 +49,9 @@ class Attention(nn.Module):
         key_vals = self.k(input_data)
         value_vals = self.v(input_data)
 
+        batch_count, token_count, embedding_count = input_data.shape
         mult = (query_vals @ key_vals.transpose(1,2)) / ((self.dim_per_head)**.5) # attention weighting
-        mult = mult.masked_fill(self.masked_weights == 0, float('-inf'))
+        mult = mult.masked_fill(self.masked_weights[:token_count, :token_count] == 0, float('-inf'))
         mult = F.softmax(mult, 2)
         return mult @ value_vals
 
@@ -93,7 +94,8 @@ class Transformer_Model(nn.Module):
 
     def forward(self, input_data, expected_result=None):
         # first we obtain the positional encoding values
-        positional_embeddings = self.positional_embedding_table(torch.arange(num_tokens_per_batch_stream))
+        num_batches, num_toks_in_batch = input_data.shape
+        positional_embeddings = self.positional_embedding_table(torch.arange(num_toks_in_batch))
         token_embeddings = self.token_embedding_table(input_data)
 
         #positional encoding
@@ -106,11 +108,11 @@ class Transformer_Model(nn.Module):
         x = self.layer_norm_2(x)
         x = self.lin_layer(x) # this final layer calculates our most probable word from the list of words (shape is Batch-Time-Token)
 
-        if not expected_result: # i.e. we're generating, not training
+        if expected_result is None: # i.e. we're generating, not training
             return x, None 
 
         # calculate the loss and return it. for this we're better off just turning the whole output result and expected output result into a 1 by N dimensional value and performing cross entropy
-        batch_size = logits.shape[0] # we only need the first one, as it is set in the setup. The other two are already avaialble in our code
+        batch_size = x.shape[0] # we only need the first one, as it is set in the setup. The other two are already avaialble in our code
         logits = x.view(batch_size*num_tokens_per_batch_stream, num_tokens) 
         target_values = expected_result.view(batch_size*num_tokens_per_batch_stream)
         loss = F.cross_entropy(logits, target_values)
@@ -132,10 +134,4 @@ class Transformer_Model(nn.Module):
             next_token = torch.multinomial(probs, num_samples=1) # generate the next sample with a degree of randomness, as we don't always want the most probable sample for the sake of textual diversity
             updated_context = torch.cat((updated_context, next_token), dim=1) # updates the time component (list of tokens for the batch) of the given context
         return updated_context
-
-
-
-
-
-
-
+    

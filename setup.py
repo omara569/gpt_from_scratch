@@ -2,6 +2,7 @@ import requests
 from typing import Tuple, List
 import torch
 from transformer_building import Transformer_Model
+import re
 
 
 def get_text(url: str) -> str:
@@ -9,7 +10,15 @@ def get_text(url: str) -> str:
         Obtain the text for training purposes
     '''
     content = requests.get(url, timeout=None)
-    return content.text
+    # filter text to desired starting and ending points
+    text = content.text
+    tmp = list(re.finditer(r'(BOOK I\.)', text))
+    start_idx_text = tmp[1].span()[0]
+    text = text[start_idx_text:]
+    tmp = list(re.finditer(r'(END OF THE PROJECT GUTENBERG EBOOK THE ILIAD)', text))
+    end_idx_text = tmp[0].span()[0] - 4
+    text = text[:end_idx_text]
+    return text
 
 
 def create_vocabulary(input_text: str) -> Tuple[set, int]:
@@ -49,7 +58,8 @@ def get_batch(data: torch.tensor, block_size=8, batch_size=4) -> Tuple[torch.ten
 
 
 if __name__=='__main__':
-    book_text = get_text('https://www.gutenberg.org/cache/epub/59306/pg59306.txt')
+    book_text = get_text('https://www.gutenberg.org/cache/epub/3059/pg3059.txt')
+
     vocab, length_vocab = create_vocabulary(book_text)
     
     # create mappings
@@ -68,8 +78,25 @@ if __name__=='__main__':
     # create data loader
     torch.manual_seed(42)
     block_size, batch_size = 8, 4
-    X, y = get_batch(training_set, block_size, batch_size)
 
+    # model creation, training
     model = Transformer_Model()
-    model(X, y)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = model.to(device)
+
+    # optimizer setup
+    optimizer = torch.optim.AdamW(model.parameters(), lr=.01)
+
+    for iteration in range(10000):
+        xb, yb = get_batch(training_set, block_size, batch_size)
+
+        # evaluation of the loss . . . 
+        logits, loss = model(xb, yb)
+        optimizer.zero_grad()
+        loss.backward() # backpropogation step
+        optimizer.step()
     
+    # model text generation
+    context = torch.zeros((1,1), dtype=torch.long, device=device) # this is to be our starting context
+    generated_text = model.generate(context, max_new_tokens=500)
+    print(''.join(convert_output_to_strs(generated_text[0].tolist(), mapper=num_to_str_mapping)))
