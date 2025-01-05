@@ -58,14 +58,18 @@ def get_batch(data: torch.tensor, block_size=8, batch_size=4) -> Tuple[torch.ten
 
 
 if __name__=='__main__':
+    print('Getting Text')
     book_text = get_text('https://www.gutenberg.org/cache/epub/3059/pg3059.txt')
 
+    print('Creating Vocab')
     vocab, length_vocab = create_vocabulary(book_text)
     
+    print('Creating Mappings')
     # create mappings
     str_to_num_mapping = create_str_to_num(vocab)
     num_to_str_mapping = create_num_to_str(str_to_num_mapping)
 
+    print('Converting input to numerical values')
     # map the data
     input_to_nums = convert_input_to_nums(book_text, str_to_num_mapping)
 
@@ -74,8 +78,9 @@ if __name__=='__main__':
     training_data, testing_data = input_to_nums[:training_end_index], input_to_nums[training_end_index:]
     training_set = torch.tensor(training_data, dtype=torch.long)
     test_set = torch.tensor(testing_data, dtype=torch.long)
-
-    # create data loader
+    
+    print('Create Model')
+    # Training Model
     torch.manual_seed(42)
     block_size, batch_size = 8, 4
 
@@ -87,15 +92,19 @@ if __name__=='__main__':
     # optimizer setup
     optimizer = torch.optim.AdamW(model.parameters(), lr=.01)
 
+    print('Training the model')
     for iteration in range(10000):
         xb, yb = get_batch(training_set, block_size, batch_size)
 
         # evaluation of the loss . . . 
         logits, loss = model(xb, yb)
+        if (iteration % 300) == 0:
+            print(f'Iteration Number: {iteration}\nLoss: {loss}')
         optimizer.zero_grad()
         loss.backward() # backpropogation step
         optimizer.step()
     
+    print('Generating Text . . .\n\n')
     # model text generation
     context = torch.zeros((1,1), dtype=torch.long, device=device) # this is to be our starting context
     generated_text = model.generate(context, max_new_tokens=500)
