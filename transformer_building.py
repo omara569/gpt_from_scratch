@@ -11,6 +11,8 @@ num_tokens = 118 # NOTE: Change this to be the actual number of unique tokens
 dropout_probability = .2
 masked_attention = True
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 
 class Feed_Forward(nn.Module):
     def __init__(self, num_inputs, num_outputs):
@@ -81,20 +83,20 @@ class Block_Layer(nn.Module):
 class Transformer_Model(nn.Module):
     def __init__(self):
         super().__init__()
-        self.positional_embedding_table = nn.Embedding(num_tokens_per_batch_stream, num_embeddings)
-        self.token_embedding_table = nn.Embedding(num_tokens, num_embeddings)
+        self.positional_embedding_table = nn.Embedding(num_tokens_per_batch_stream, num_embeddings, device=device)
+        self.token_embedding_table = nn.Embedding(num_tokens, num_embeddings, device=device)
         self.feed_forward = Feed_Forward(num_embeddings, num_embeddings)
-        self.lin_layer = nn.Linear(num_embeddings, num_tokens)
+        self.lin_layer = nn.Linear(num_embeddings, num_tokens, device=device)
         self.blocks = nn.Sequential(*[Block_Layer() for i in range(num_block_layers)])
-        self.layer_norm = nn.LayerNorm(num_embeddings)
-        self.layer_norm_2 = nn.LayerNorm(num_embeddings)
+        self.layer_norm = nn.LayerNorm(num_embeddings, device=device)
+        self.layer_norm_2 = nn.LayerNorm(num_embeddings, device=device)
 
 
 
     def forward(self, input_data, expected_result=None):
         # first we obtain the positional encoding values
         num_batches, num_toks_in_batch = input_data.shape
-        positional_embeddings = self.positional_embedding_table(torch.arange(num_toks_in_batch))
+        positional_embeddings = self.positional_embedding_table(torch.arange(num_toks_in_batch, device=device))
         token_embeddings = self.token_embedding_table(input_data)
 
         #positional encoding

@@ -47,13 +47,15 @@ def convert_output_to_strs(input_list: list, mapper: dict) -> List[str]:
     return [mapper[i] for i in input_list]
 
 
-def get_batch(data: torch.tensor, block_size=8, batch_size=4) -> Tuple[torch.tensor, torch.tensor]:
+def get_batch(data: torch.tensor, block_size=8, batch_size=4, device='cpu') -> Tuple[torch.tensor, torch.tensor]:
     '''
         This will create a batch for processing (either training or testing). 
     '''
     nums_to_produce = torch.randint(low=0, high=len(data)-block_size+1, size=(batch_size, 1)) # produce 4 random integers for the positions of each index of the batch
     X = torch.vstack([data[i:i+block_size] for i in nums_to_produce])
     y = torch.vstack([data[i+1:i+block_size+1] for i in nums_to_produce])
+    X = X.to(device=device)
+    y = y.to(device=device)
     return X, y
 
 
@@ -93,13 +95,13 @@ if __name__=='__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=.01)
 
     print('Training the model')
-    for iteration in range(50000):
-        xb, yb = get_batch(training_set, block_size, batch_size)
+    for iteration in range(200000):
+        xb, yb = get_batch(training_set, block_size, batch_size, device)
 
         # evaluation of the loss . . . 
         logits, loss = model(xb, yb)
         if ((iteration) % 300) == 0:
-            print(f'Iteration Number: {iteration+1}\nLoss: {loss}')
+            print(f'Iteration Number: {iteration}\nLoss: {loss}')
         optimizer.zero_grad()
         loss.backward() # backpropogation step
         optimizer.step()
