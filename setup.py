@@ -82,7 +82,7 @@ if __name__=='__main__':
     print('Create Model')
     # Training Model
     torch.manual_seed(42)
-    block_size, batch_size = 8, 4
+    block_size, batch_size = 10, 4
 
     # model creation, training
     model = Transformer_Model()
@@ -93,13 +93,13 @@ if __name__=='__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=.01)
 
     print('Training the model')
-    for iteration in range(10000):
+    for iteration in range(50000):
         xb, yb = get_batch(training_set, block_size, batch_size)
 
         # evaluation of the loss . . . 
         logits, loss = model(xb, yb)
-        if (iteration % 300) == 0:
-            print(f'Iteration Number: {iteration}\nLoss: {loss}')
+        if ((iteration) % 300) == 0:
+            print(f'Iteration Number: {iteration+1}\nLoss: {loss}')
         optimizer.zero_grad()
         loss.backward() # backpropogation step
         optimizer.step()
@@ -109,3 +109,5 @@ if __name__=='__main__':
     context = torch.zeros((1,1), dtype=torch.long, device=device) # this is to be our starting context
     generated_text = model.generate(context, max_new_tokens=500)
     print(''.join(convert_output_to_strs(generated_text[0].tolist(), mapper=num_to_str_mapping)))
+    model = model.to('cpu')
+    torch.save(model, 'transformer_model.pkl')

@@ -6,8 +6,7 @@ import torch.nn.functional as F
 num_embeddings = 32
 num_block_layers = 6 # as in the paper
 num_heads = 8 # number of heads for multi-headed attention
-num_tokens_per_batch_stream = 8 # number of tokens per sequence
-num_epochs = 5000
+num_tokens_per_batch_stream = 10 # number of tokens per sequence
 num_tokens = 118 # NOTE: Change this to be the actual number of unique tokens
 dropout_probability = .2
 masked_attention = True
