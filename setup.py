@@ -1,7 +1,7 @@
 import requests 
 from typing import Tuple, List
 import torch
-from transformer_building import Transformer_Model
+from transformer_building import Transformer_Model, block_size, batch_size
 import re
 
 
@@ -84,7 +84,6 @@ if __name__=='__main__':
     print('Create Model')
     # Training Model
     torch.manual_seed(42)
-    block_size, batch_size = 10, 4
 
     # model creation, training
     model = Transformer_Model()
@@ -95,7 +94,7 @@ if __name__=='__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=.01)
 
     print('Training the model')
-    for iteration in range(200000):
+    for iteration in range(250000):
         xb, yb = get_batch(training_set, block_size, batch_size, device)
 
         # evaluation of the loss . . . 
