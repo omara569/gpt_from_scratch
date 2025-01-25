@@ -6,10 +6,12 @@ import torch.nn.functional as F
 num_embeddings = 32
 num_block_layers = 6 # as in the paper
 num_heads = 8 # number of heads for multi-headed attention
-num_tokens_per_batch_stream = 10 # number of tokens per sequence
 num_tokens = 118 # NOTE: Change this to be the actual number of unique tokens
 dropout_probability = .2
 masked_attention = True
+block_size = 10 # number of tokens per batch
+batch_size = 4 # number of batches
+
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -42,7 +44,7 @@ class Attention(nn.Module):
         self.k = nn.Linear(num_embeddings, dim_per_head)
         self.v = nn.Linear(num_embeddings, dim_per_head)
 
-        self.register_buffer('masked_weights', torch.tril(torch.ones(num_tokens_per_batch_stream, num_tokens_per_batch_stream)))
+        self.register_buffer('masked_weights', torch.tril(torch.ones(block_size, block_size)))
 
     
     def forward(self, input_data):
@@ -69,11 +71,59 @@ class MultiAttention(nn.Module):
         return self.lin_layer(torch.concat([attention_head(input_data) for attention_head in self.attention_head_list], dim=2))
 
 
+class MultiAttention2(nn.Module):
+    '''
+        This class is a more efficient implementation of Multi-Headed Attention that instead uses the direct tensor 
+        calculation method instead of defining multiple attention heads and concatenating their results
+    '''
+    
+    def __init__(self):
+        super().__init__()
+        self.query_weights_matrix = nn.Linear(num_embeddings, num_embeddings, device=device) 
+        self.key_weights_matrix = nn.Linear(num_embeddings, num_embeddings, device=device) 
+        self.value_weights_matrix = nn.Linear(num_embeddings, num_embeddings, device=device) 
+        self.register_buffer('masked_weights', torch.tril(torch.ones(block_size, block_size)))
+
+
+    def forward(self, input_data):
+        '''
+            Performs the multi-headed attention forward pass
+        '''
+        query = self.query_weights_matrix(input_data) 
+        key = self.key_weights_matrix(input_data) 
+        value = self.value_weights_matrix(input_data) 
+
+        # now we have the query, key, and value calculations for each attention head, we want to reshape them for further calculations on each attention head
+        embeddings_per_head = num_embeddings//num_heads
+        query2 = query.reshape((batch_size, block_size, num_heads, embeddings_per_head))
+        key2 = key.reshape((batch_size, block_size, num_heads, embeddings_per_head))
+        value2 = value.reshape((batch_size, block_size, num_heads, embeddings_per_head))
+
+        query2 = query2.transpose(1,2)
+        key2 = key2.transpose(1,2)
+        value2 = value2.transpose(1,2)
+
+        # Calculate the attention scores. Use the masked weights here!
+        attention_scores = query2.matmul(key2.transpose(-1, -2)) / torch.sqrt(torch.tensor(embeddings_per_head))
+        # now we want to apply the masked weights
+        attention_scores = attention_scores.masked_fill(self.masked_weights[:block_size, :block_size]==0, float('-inf'))
+
+
+        attention_weights = attention_scores.softmax(-1)
+        attention_output = attention_weights.matmul(value2)
+
+        # Now we want to return the results by transposing and reshaping
+        attention_output2 = attention_output.transpose(1,2).reshape((batch_size, block_size, num_embeddings))
+
+        return attention_output2  
+
+
 class Block_Layer(nn.Module):
     def __init__(self):
         super().__init__()
         # repeated sets of multi-headed attention
-        self.multi_headed_list = nn.Sequential(*[MultiAttention() for i in range(num_block_layers)])
+        # self.multi_headed_list = nn.Sequential(*[MultiAttention() for i in range(num_block_layers)])
+        self.multi_headed_list = nn.Sequential(*[MultiAttention2() for i in range(num_block_layers)])
     
 
     def forward(self, input_data):
@@ -83,7 +133,7 @@ class Block_Layer(nn.Module):
 class Transformer_Model(nn.Module):
     def __init__(self):
         super().__init__()
-        self.positional_embedding_table = nn.Embedding(num_tokens_per_batch_stream, num_embeddings, device=device)
+        self.positional_embedding_table = nn.Embedding(block_size, num_embeddings, device=device)
         self.token_embedding_table = nn.Embedding(num_tokens, num_embeddings, device=device)
         self.feed_forward = Feed_Forward(num_embeddings, num_embeddings)
         self.lin_layer = nn.Linear(num_embeddings, num_tokens, device=device)
@@ -114,8 +164,8 @@ class Transformer_Model(nn.Module):
 
         # calculate the loss and return it. for this we're better off just turning the whole output result and expected output result into a 1 by N dimensional value and performing cross entropy
         batch_size = x.shape[0] # we only need the first one, as it is set in the setup. The other two are already avaialble in our code
-        logits = x.view(batch_size*num_tokens_per_batch_stream, num_tokens) 
-        target_values = expected_result.view(batch_size*num_tokens_per_batch_stream)
+        logits = x.view(batch_size*block_size, num_tokens) 
+        target_values = expected_result.view(batch_size*block_size)
         loss = F.cross_entropy(logits, target_values)
 
         return logits, loss
@@ -127,7 +177,7 @@ class Transformer_Model(nn.Module):
         '''
         updated_context = context
         for _ in range(max_new_tokens):
-            new_context = updated_context[:, -num_tokens_per_batch_stream:] # we have a limited context we work with when training and generating
+            new_context = updated_context[:, -block_size:] # we have a limited context we work with when training and generating
             logits, _ = self(new_context) # we throw away the loss since it's not used in generation
             logits_2 = logits[:, -1, :] # takes the last predicted token's logits in each batch of elements
             probs = F.softmax(logits_2, dim=-1) # run softmax on each batch's logits for the last predicted token
