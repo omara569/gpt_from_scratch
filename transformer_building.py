@@ -33,42 +33,42 @@ class Feed_Forward(nn.Module):
         return self.net(input_data)
     
 
-class Attention(nn.Module):
-    def __init__(self, dim_per_head):
-        '''
-            Attention head
-        '''
-        super().__init__()
-        self.dim_per_head = dim_per_head
-        self.q = nn.Linear(num_embeddings, dim_per_head)
-        self.k = nn.Linear(num_embeddings, dim_per_head)
-        self.v = nn.Linear(num_embeddings, dim_per_head)
+# class Attention(nn.Module):
+#     def __init__(self, dim_per_head):
+#         '''
+#             Attention head
+#         '''
+#         super().__init__()
+#         self.dim_per_head = dim_per_head
+#         self.q = nn.Linear(num_embeddings, dim_per_head)
+#         self.k = nn.Linear(num_embeddings, dim_per_head)
+#         self.v = nn.Linear(num_embeddings, dim_per_head)
 
-        self.register_buffer('masked_weights', torch.tril(torch.ones(block_size, block_size)))
-
-    
-    def forward(self, input_data):
-        query_vals = self.q(input_data)
-        key_vals = self.k(input_data)
-        value_vals = self.v(input_data)
-
-        batch_count, token_count, embedding_count = input_data.shape
-        mult = (query_vals @ key_vals.transpose(1,2)) / ((self.dim_per_head)**.5) # attention weighting
-        mult = mult.masked_fill(self.masked_weights[:token_count, :token_count] == 0, float('-inf'))
-        mult = F.softmax(mult, 2)
-        return mult @ value_vals
-
-
-class MultiAttention(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # Multi-headed attention is taking multiple attention heads and having them function in parallel, concatenating their results at the end. Each attention performs operations on a subset of the embedding dimensionality
-        self.attention_head_list = nn.ModuleList([Attention(num_embeddings//num_heads) for _ in range(num_heads)])
-        self.lin_layer = nn.Linear(num_embeddings, num_embeddings)
+#         self.register_buffer('masked_weights', torch.tril(torch.ones(block_size, block_size)))
 
     
-    def forward(self, input_data):
-        return self.lin_layer(torch.concat([attention_head(input_data) for attention_head in self.attention_head_list], dim=2))
+#     def forward(self, input_data):
+#         query_vals = self.q(input_data)
+#         key_vals = self.k(input_data)
+#         value_vals = self.v(input_data)
+
+#         batch_count, token_count, embedding_count = input_data.shape
+#         mult = (query_vals @ key_vals.transpose(1,2)) / ((self.dim_per_head)**.5) # attention weighting
+#         mult = mult.masked_fill(self.masked_weights[:token_count, :token_count] == 0, float('-inf'))
+#         mult = F.softmax(mult, 2)
+#         return mult @ value_vals
+
+
+# class MultiAttention(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         # Multi-headed attention is taking multiple attention heads and having them function in parallel, concatenating their results at the end. Each attention performs operations on a subset of the embedding dimensionality
+#         self.attention_head_list = nn.ModuleList([Attention(num_embeddings//num_heads) for _ in range(num_heads)])
+#         self.lin_layer = nn.Linear(num_embeddings, num_embeddings)
+
+    
+#     def forward(self, input_data):
+#         return self.lin_layer(torch.concat([attention_head(input_data) for attention_head in self.attention_head_list], dim=2))
 
 
 class MultiAttention2(nn.Module):
